@@ -1,0 +1,77 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.1.0.0",
+  "parameters": {
+    "vnetAddressPrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "VNet prefix (CIDR)"
+      }
+    },
+    "subnets": {
+      "type": "array",
+      "metadata": {
+        "description": "Array of subnets to be created"
+      }
+    },
+    "vnetName": {
+      "type": "string",
+      "defaultValue": "vnet",
+      "metadata": {
+        "description": "Virtual Network name"
+      }
+    },
+    "addedSubnetName": {
+      "type": "string",
+      "defaultValue": "subnet",
+      "metadata": {
+        "description": "Name of the subnet to add"
+      }
+    },
+    "addedSubnetPrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "CIDR prefix of the subnet to add"
+      }
+    }
+  },
+  "variables": {
+    "sbn": [
+      {
+        "name": "[parameters('addedSubnetName')]",
+        "properties": {
+          "addressPrefix": "[parameters('addedSubnetPrefix')]"
+        }
+      }
+    ]
+  },
+  "resources": [
+    {
+      "name": "[parameters('vnetName')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2017-10-01",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "[parameters('vnetName')]"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('vnetAddressPrefix')]"
+          ]
+        },
+        "subnets": "[concat(parameters('subnets'),variables('sbn'))]"
+      }
+    }
+  ],
+  "outputs": {
+    "vnetSubnets": {
+      "type": "array",
+      "value": "[reference(parameters('vnetName')).subnets]"
+    },
+    "vnetLength": {
+      "type": "int",
+      "value": "[length(reference(parameters('vnetName')).subnets)]"
+    }
+  }
+}
