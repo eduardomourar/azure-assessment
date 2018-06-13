@@ -1,0 +1,10 @@
+# Time log
+- Create Azure account (10 min)
+- Setup repository and folder/files structure (45 min)
+- Create initial deploy script (20 min)
+- Add Storage Account to template file (15 min)
+- Add Virtual Network (30 min)
+- Make templates more generic (45 min)
+- Add tag to resource group (45 min)
+- Add policy definition and assignment (120 min)
+- Final testing of script (30 min)

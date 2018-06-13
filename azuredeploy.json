@@ -1,0 +1,127 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "storageCategory": {
+      "type": "string",
+      "defaultValue": "Standard",
+      "metadata": {
+        "description": "Storage type. Can be either Standard (HDD) or Premium (SSD)"
+      },
+      "allowedValues": [
+        "Standard",
+        "Premium"
+      ]
+    },
+    "storageNamePrefix": {
+      "type": "string",
+      "maxLength": 11,
+      "defaultValue": "storage",
+      "metadata": {
+        "description": "The value to use for starting the storage account name. Use only lowercase letters and numbers."
+      }
+    },
+    "vnetNamePrefix": {
+      "type": "string",
+      "maxLength": 11,
+      "defaultValue": "vnet",
+      "metadata": {
+        "description": "The value to use for starting the virtual network name."
+      }
+    },
+    "subnetNamePrefix": {
+      "type": "string",
+      "maxLength": 11,
+      "defaultValue": "sbn",
+      "metadata": {
+        "description": "The value to use for starting the sub network name."
+      }
+    },
+    "numberOfSubnets": {
+      "type": "int",
+      "defaultValue": 3,
+      "minValue": 2,
+      "maxValue": 20,
+      "metadata": {
+        "description": "Number of subnets in the VNet. Must be between 2 and 20"
+      }
+    },
+    "assetUri": {
+      "type": "string",
+      "metadata": {
+        "description": "The URI of resources such as templates that the script is dependent"
+      },
+      "defaultValue": "https://raw.githubusercontent.com/eduardomourar/azure-assessment/master/nested/"
+    }
+  },
+  "variables": {
+    "storageSku": "[concat(parameters('storageCategory'),'_LRS')]",
+    "vnetAddressPrefix": "172.16.0.0/12",
+    "vnetName": "[concat(toLower(parameters('vnetNamePrefix')), uniqueString(resourceGroup().id))]"
+  },
+  "resources": [
+    {
+      "name": "storage-deploy",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2017-05-10",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(parameters('assetUri'), 'azurestorage.json')]",
+          "contentVersion": "1.1.0.0"
+        },
+        "parameters": {
+          "storageSku": {
+            "value": "[variables('storageSku')]"
+          },
+          "storageNamePrefix": {
+            "value": "[parameters('storageNamePrefix')]"
+          }
+        }
+      }
+    },
+    {
+      "name": "[concat('sbn-', copyIndex(1))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2017-05-10",
+      "copy": {
+        "name": "iter",
+        "count": "[parameters('numberOfSubnets')]"
+      },
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(parameters('assetUri'), 'azuresubnet.json')]",
+          "contentVersion": "1.1.0.0"
+        },
+        "parameters": {
+          "vnetAddressPrefix": {
+            "value": "[variables('vnetAddressPrefix')]"
+          },
+          "subnets": {
+            "value": []
+          },
+          "vnetName": {
+            "value": "[variables('vnetName')]"
+          },
+          "addedSubnetName": {
+            "value": "[concat(parameters('subnetNamePrefix'), copyIndex(1))]"
+          },
+          "addedSubnetPrefix": {
+            "value": "[concat('172.16.', copyIndex(1), '.0/24')]"
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "subnets": {
+      "type": "array",
+      "value": "[reference(concat('sbn-',add(parameters('numberOfSubnets'),-1))).outputs.vnetSubnets.value]"
+    },
+    "lenVnetSubnets": {
+      "type": "int",
+      "value": "[reference(concat('sbn-',add(parameters('numberOfSubnets'),-1))).outputs.vnetLength.value]"
+    }
+  }
+}

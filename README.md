@@ -13,7 +13,7 @@
 
 ### Deploy Button Option
 
-By clicking on the deploy button below, the assessment basic template will be deployed to Azure subscription and resource group selected.
+By clicking on the deploy button below, the basic assessment template will be deployed to Azure subscription and resource group selected.
 
 [![Deploy to Azure](http://azuredeploy.net/deploybutton.png)](https://azuredeploy.net/) [![Visualize](http://armviz.io/visualizebutton.png)](https://armviz.io/)
 
