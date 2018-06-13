@@ -32,7 +32,7 @@
     {
       "name": "[variables('storageName')]",
       "type": "Microsoft.Storage/storageAccounts",
-      "apiVersion": "2015-01-01",
+      "apiVersion": "2015-06-15",
       "sku": {
         "name": "[parameters('storageSku')]"
       },
