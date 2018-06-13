@@ -35,6 +35,9 @@ param(
 
 Import-Module AzureRM -ErrorAction Stop
 
+[string] $errorActionPreference = 'SilentlyContinue'
+[array] $resourceProviders = @("microsoft.compute", "microsoft.network", "microsoft.storage");
+
 #endregion
 
 #region Functions
@@ -81,16 +84,26 @@ function retrieveSubscription($subscription) {
     return $subscription
 }
 
-function createResourceGroup() {
+function registerProviders($resourceProviders) {
+    Write-Host ""
+    Write-Host "**************************************************************************************************"
+    Write-Host "* Registering resource providers..."
+    Write-Host "**************************************************************************************************"
+    foreach($resourceProvider in $resourceProviders) {
+        Register-AzureRmResourceProvider -ProviderNamespace $resourceProvider;
+    }
+}
+
+function createResourceGroup($groupName) {
     # Create or update the resource group
     Write-Host ""
     Write-Host "**************************************************************************************************"
     Write-Host "* Creating the resource group..."
     Write-Host "**************************************************************************************************"
-    return New-AzureRmResourceGroup -Name $resourceGroupName -Location $resourceGroupLocation -Verbose -Force -ErrorAction Stop
+    return New-AzureRmResourceGroup -Name $groupName -Location $resourceGroupLocation -Verbose -Force -ErrorAction $errorActionPreference
 }
 
-function deployResources() {
+function deployResources($groupName) {
     # Define default parameters for deployment
     [string] $templateDeploy = '.\azuredeploy.json'
     [string] $parametersDeploy = '.\azuredeploy.parameters.json'
@@ -106,7 +119,7 @@ function deployResources() {
     Write-Host "**************************************************************************************************"
     $deployment = $null
     $deployment = New-AzureRmResourceGroupDeployment -Name $deploymentName `
-                                                        -ResourceGroupName $resourceGroupName `
+                                                        -ResourceGroupName $groupName `
                                                         -TemplateParameterFile $parametersDeploy `
                                                         -TemplateFile $templateDeploy `
                                                         -Force -Verbose
@@ -159,16 +172,16 @@ function ConvertTo-Hashtable {
     }
 }
 
-function applyTags() {
+function applyTags($groupName) {
     Write-Host ""
     Write-Host "**************************************************************************************************"
     Write-Host "* Applying tags to resource group..."
     Write-Host "**************************************************************************************************"
     [string] $resourceTags = '.\nested\resourcegroup-tags.json'
     $resourceTags = [System.IO.Path]::Combine($PSScriptRoot, $resourceTags)
-    $tags = (Get-AzureRmResourceGroup -Name $resourceGroupName).Tags + (Get-Content $resourceTags | ConvertFrom-Json | ConvertTo-Hashtable)
+    $tags = (Get-AzureRmResourceGroup -Name $groupName).Tags + (Get-Content $resourceTags | ConvertFrom-Json | ConvertTo-Hashtable)
     $setResourceGroup = $null
-    $setResourceGroup = Set-AzureRmResourceGroup -Name $resourceGroupName -Tag $tags
+    $setResourceGroup = Set-AzureRmResourceGroup -Name $groupName -Tag $tags
     if ($setResourceGroup.ProvisioningState -ne "Succeeded") {
         Write-Error "Failed to tag resouce group."
         exit 1
@@ -210,10 +223,13 @@ function assignPolicy($assignmentScope) {
 #region Azure deployment and policy assigment
 
 $subscriptionId = retrieveSubscription($subscriptionId)
-if ($subscriptionId.Length -gt 1) {
-    $resourceGroup = createResourceGroup
-    deployResources
-    applyTags
+if ($subscriptionId.Length) {
+    if ($resourceProviders.Length) {
+        registerProviders($resourceProviders);
+    }
+    $resourceGroup = createResourceGroup($resourceGroupName)
+    deployResources($resourceGroup.ResourceGroupName)
+    applyTags($resourceGroup.ResourceGroupName)
     assignPolicy($resourceGroup.ResourceId)
 
     Write-Host ""

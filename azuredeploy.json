@@ -1,5 +1,5 @@
 {
-  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
     "storageCategory": {
@@ -63,7 +63,7 @@
     {
       "name": "storage-deploy",
       "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2017-05-10",
+      "apiVersion": "2015-01-01",
       "properties": {
         "mode": "Incremental",
         "templateLink": {
@@ -81,17 +81,13 @@
       }
     },
     {
-      "name": "[concat('sbn-', copyIndex(1))]",
+      "name": "sbn0",
       "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2017-05-10",
-      "copy": {
-        "name": "iter",
-        "count": "[parameters('numberOfSubnets')]"
-      },
+      "apiVersion": "2015-01-01",
       "properties": {
         "mode": "Incremental",
         "templateLink": {
-          "uri": "[concat(parameters('assetUri'), 'azuresubnet.json')]",
+          "uri": "[concat(parameters('assetUri'), 'azurevnet.json')]",
           "contentVersion": "1.1.0.0"
         },
         "parameters": {
@@ -100,6 +96,39 @@
           },
           "subnets": {
             "value": []
+          },
+          "vnetName": {
+            "value": "[variables('vnetName')]"
+          },
+          "addedSubnetName": {
+            "value": "[concat(parameters('subnetNamePrefix'), 0)]"
+          },
+          "addedSubnetPrefix": {
+            "value": "[concat('172.16.0.0/24')]"
+          }
+        }
+      }
+    },
+    {
+      "name": "[concat('sbn', copyIndex(1))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2015-01-01",
+      "copy": {
+        "name": "iter",
+        "count": "[add(parameters('numberOfSubnets'), -1)]"
+      },
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(parameters('assetUri'), 'azurevnet.json')]",
+          "contentVersion": "1.1.0.0"
+        },
+        "parameters": {
+          "vnetAddressPrefix": {
+            "value": "[variables('vnetAddressPrefix')]"
+          },
+          "subnets": {
+            "value": "[reference(concat('sbn', copyIndex())).outputs.vnetSubnets.value]"
           },
           "vnetName": {
             "value": "[variables('vnetName')]"
@@ -117,11 +146,11 @@
   "outputs": {
     "subnets": {
       "type": "array",
-      "value": "[reference(concat('sbn-',add(parameters('numberOfSubnets'),-1))).outputs.vnetSubnets.value]"
+      "value": "[reference(concat('sbn', add(parameters('numberOfSubnets'), -1))).outputs.vnetSubnets.value]"
     },
     "lenVnetSubnets": {
       "type": "int",
-      "value": "[reference(concat('sbn-',add(parameters('numberOfSubnets'),-1))).outputs.vnetLength.value]"
+      "value": "[reference(concat('sbn', add(parameters('numberOfSubnets'), -1))).outputs.vnetLength.value]"
     }
   }
 }

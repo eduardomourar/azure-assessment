@@ -49,18 +49,16 @@
     {
       "name": "[parameters('vnetName')]",
       "type": "Microsoft.Network/virtualNetworks",
-      "apiVersion": "2017-10-01",
+      "apiVersion": "2015-01-01",
       "location": "[resourceGroup().location]",
-      "tags": {
-        "displayName": "[parameters('vnetName')]"
-      },
+      "tags": {},
       "properties": {
         "addressSpace": {
           "addressPrefixes": [
             "[parameters('vnetAddressPrefix')]"
           ]
         },
-        "subnets": "[concat(parameters('subnets'),variables('sbn'))]"
+        "subnets": "[concat(parameters('subnets'), variables('sbn'))]"
       }
     }
   ],
