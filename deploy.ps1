@@ -7,10 +7,10 @@
   The purpose of this script is to create/update a Resource Group into Microsoft Azure with additional services.
 .PARAMETER subscriptionId
   The subscription ID where resouce group will be updated (Default: current subscription).
-.PARAMETER resourceGroupLocation
+.PARAMETER name
+  The name of the resource group name to be updated (Default: azure-assessment).
+.PARAMETER location
   The location of the resource group name to be updated (Default: westeurope).
-.PARAMETER resourceGroupName
-  The name of the resource group name to be updated (Default: sentia-assessment).
 .INPUTS
   None
 .OUTPUTS
@@ -22,27 +22,31 @@
   Purpose/Change: Initial script development
   
 .EXAMPLE
-  .\deploy.ps1 -subscriptionId 15ce5c22-e175-4dbb-874a-fd0168d5081c -resourceGroupName sentia-assessment -resourceGroupLocation westeurope
+  .\deploy.ps1 -subscriptionId 15ce5c22-e175-4dbb-874a-fd0168d5081c -name azure-assessment -location westeurope
 #>
 
 #region Initialization and setup
 
 param(
     [string] $subscriptionId,
-    [string] $resourceGroupLocation = 'westeurope',
-    [string] $resourceGroupName = 'sentia-assessment'
+    [string] $name = 'azure-assessment',
+    [string] $location = 'westeurope'
 )
 
 Import-Module AzureRM -ErrorAction Stop
 
-[string] $errorActionPreference = 'SilentlyContinue'
-[array] $resourceProviders = @("microsoft.compute", "microsoft.network", "microsoft.storage");
+[hashtable] $commonParameters = @{
+    ErrorAction = 'SilentlyContinue'
+    Verbose = $true
+    Debug = $false
+}
+[array] $resourceProviders = @('microsoft.authorization', 'microsoft.compute', 'microsoft.network', 'microsoft.storage')
 
 #endregion
 
 #region Functions
 
-function retrieveSubscription($subscription) {
+function retrieveSubscription([string] $subscription) {
     # Verify if user is logged in by querying his subscriptions.
     # If none is found assume he is not
     Write-Host ""
@@ -84,49 +88,59 @@ function retrieveSubscription($subscription) {
     return $subscription
 }
 
-function registerProviders($resourceProviders) {
+function registerProviders([array] $resourceProviders) {
+    # Register resource providers
     Write-Host ""
     Write-Host "**************************************************************************************************"
     Write-Host "* Registering resource providers..."
     Write-Host "**************************************************************************************************"
-    foreach($resourceProvider in $resourceProviders) {
-        Register-AzureRmResourceProvider -ProviderNamespace $resourceProvider;
+    
+    foreach ($resourceProvider in $resourceProviders) {
+        Register-AzureRmResourceProvider -ProviderNamespace $resourceProvider @commonParameters
     }
 }
 
-function createResourceGroup($groupName) {
+function createResourceGroup([string] $groupName, [string] $groupLocation) {
     # Create or update the resource group
     Write-Host ""
     Write-Host "**************************************************************************************************"
-    Write-Host "* Creating the resource group..."
+    Write-Host "* Creating resource group..."
     Write-Host "**************************************************************************************************"
-    return New-AzureRmResourceGroup -Name $groupName -Location $resourceGroupLocation -Verbose -Force -ErrorAction $errorActionPreference
+    $resourceGroup = $null
+    $resourceGroup = Get-AzureRmResourceGroup -Name $groupName -Location $groupLocation @commonParameters
+    if (!$resourceGroup) {
+        $resourceGroup = New-AzureRmResourceGroup -Name $groupName -Location $groupLocation -Force @commonParameters
+    }
+
+    Write-Host "Selected resource group name: $groupName"
+
+    return $resourceGroup
 }
 
-function deployResources($groupName) {
-    # Define default parameters for deployment
+function deployResources([string] $groupName) {
+    # Deploy resources to Azure
     [string] $templateDeploy = '.\azuredeploy.json'
     [string] $parametersDeploy = '.\azuredeploy.parameters.json'
     [string] $deploymentName = ((Get-ChildItem $templateDeploy).BaseName + '-' + ((Get-Date).ToUniversalTime()).ToString('yyMMdd-HHmm'))
     # [string] $templateUri = 'https://raw.githubusercontent.com/eduardomourar/azure-assessment/master/azuredeploy.json'
     $templateDeploy = [System.IO.Path]::Combine($PSScriptRoot, $templateDeploy)
     $parametersDeploy = [System.IO.Path]::Combine($PSScriptRoot, $parametersDeploy)
-
-    # Create resources to Azure
+    
     Write-Host ""
     Write-Host "**************************************************************************************************"
-    Write-Host "* Deploying the storage account and network resources..."
+    Write-Host "* Deploying storage account and network resources..."
     Write-Host "**************************************************************************************************"
     $deployment = $null
     $deployment = New-AzureRmResourceGroupDeployment -Name $deploymentName `
                                                         -ResourceGroupName $groupName `
                                                         -TemplateParameterFile $parametersDeploy `
                                                         -TemplateFile $templateDeploy `
-                                                        -Force -Verbose
-    if ($deployment.ProvisioningState -ne "Succeeded") {
+                                                        -Force @commonParameters
+    if ($deployment.ProvisioningState -ne 'Succeeded') {
         Write-Error "Failed to provision the resources."
         exit 1
     }
+    return $deployment
 }
 
 # From https://4sysops.com/archives/convert-json-to-a-powershell-hash-table/
@@ -172,24 +186,29 @@ function ConvertTo-Hashtable {
     }
 }
 
-function applyTags($groupName) {
+function applyTags([string] $groupName) {
     Write-Host ""
     Write-Host "**************************************************************************************************"
     Write-Host "* Applying tags to resource group..."
     Write-Host "**************************************************************************************************"
     [string] $resourceTags = '.\nested\resourcegroup-tags.json'
     $resourceTags = [System.IO.Path]::Combine($PSScriptRoot, $resourceTags)
-    $tags = (Get-AzureRmResourceGroup -Name $groupName).Tags + (Get-Content $resourceTags | ConvertFrom-Json | ConvertTo-Hashtable)
-    $setResourceGroup = $null
-    $setResourceGroup = Set-AzureRmResourceGroup -Name $groupName -Tag $tags
-    if ($setResourceGroup.ProvisioningState -ne "Succeeded") {
+    $resourceGroup = $null
+    $resourceGroup = Get-AzureRmResourceGroup -Name $groupName @commonParameters
+    $tags = $resourceGroup.Tags
+    try {
+        $tags += (Get-Content $resourceTags | ConvertFrom-Json | ConvertTo-Hashtable)
+        $resourceGroup = Set-AzureRmResourceGroup -Name $groupName -Tag $tags -Force @commonParameters
+    } catch {}
+    if ($resourceGroup.ProvisioningState -ne "Succeeded") {
         Write-Error "Failed to tag resouce group."
         exit 1
     }
+    return $resourceGroup
 }
 
-function assignPolicy($assignmentScope) {
-    # Define default parameters for policy
+function assignPolicy([string] $assignmentScope) {
+    # Define and assign policy
     [string] $templatePolicy = '.\nested\azurepolicy.json'
     [string] $parametersPolicy = '.\nested\azurepolicy.parameters.json'
     [string] $rulesPolicy = '.\nested\azurepolicy.rules.json'
@@ -199,23 +218,25 @@ function assignPolicy($assignmentScope) {
     $rulesPolicy = [System.IO.Path]::Combine($PSScriptRoot, $rulesPolicy)
     $allowedResources = [System.IO.Path]::Combine($PSScriptRoot, $allowedResources)
 
-    # Define and assign policy
     Write-Host ""
     Write-Host "**************************************************************************************************"
-    Write-Host "* Defining and assigning the policy..."
+    Write-Host "* Defining and assigning policy..."
     Write-Host "**************************************************************************************************"
     $definition = $null
     $definition = New-AzureRmPolicyDefinition -Name "allowed-resourcetypes-custom" `
                                                 -DisplayName "Allowed resource types (Custom)" `
-                                                -description "This policy enables you to specify the resource types that your organization can deploy." `
+                                                -Description "This policy enables you to specify the resource types that your organization can deploy." `
                                                 -Policy $rulesPolicy `
                                                 -Parameter $parametersPolicy `
-                                                -Mode All
+                                                -Mode All @commonParameters
 
-    New-AzureRMPolicyAssignment -Name $assignmentName `
-                                -Scope $assignmentScope `
-                                -PolicyParameter $allowedResources `
-                                -PolicyDefinition $definition
+    $assignment = $null  
+    $assignment = New-AzureRMPolicyAssignment -Name $assignmentName `
+                                                -Scope $assignmentScope `
+                                                -PolicyParameter $allowedResources `
+                                                -PolicyDefinition $definition `
+                                                @commonParameters
+    return $assignment
 }
 
 #endregion
@@ -225,12 +246,12 @@ function assignPolicy($assignmentScope) {
 $subscriptionId = retrieveSubscription($subscriptionId)
 if ($subscriptionId.Length) {
     if ($resourceProviders.Length) {
-        registerProviders($resourceProviders);
+        registerProviders -resourceProviders $resourceProviders
     }
-    $resourceGroup = createResourceGroup($resourceGroupName)
-    deployResources($resourceGroup.ResourceGroupName)
-    applyTags($resourceGroup.ResourceGroupName)
-    assignPolicy($resourceGroup.ResourceId)
+    $resourceGroup = createResourceGroup -groupName $name -groupLocation $location
+    deployResources -groupName $resourceGroup.ResourceGroupName
+    applyTags -groupName $resourceGroup.ResourceGroupName
+    assignPolicy -assignmentScope $resourceGroup.ResourceId
 
     Write-Host ""
     Write-Host "**************************************************************************************************"
