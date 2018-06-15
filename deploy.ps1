@@ -198,7 +198,7 @@ function applyTags([string] $groupName) {
     $tags = $resourceGroup.Tags
     try {
         $tags += (Get-Content $resourceTags | ConvertFrom-Json | ConvertTo-Hashtable)
-        $resourceGroup = Set-AzureRmResourceGroup -Name $groupName -Tag $tags -Force @commonParameters
+        $resourceGroup = Set-AzureRmResourceGroup -Name $groupName -Tag $tags @commonParameters
     } catch {}
     if ($resourceGroup.ProvisioningState -ne "Succeeded") {
         Write-Error "Failed to tag resouce group."
