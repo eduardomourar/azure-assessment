@@ -16,6 +16,8 @@
         }
     },
     "variables": {
+        "tenantId": "[subscription().tenantId]",
+        "subscriptionId": "[subscription().subscriptionId]",
         "storageAccountName": "[concat(uniquestring(resourceGroup().id), 'azfunc')]",
         "applicationInsightsName": "[concat(parameters('functionAppName'), '-ai')]"
     },
@@ -56,6 +58,7 @@
             "type": "Microsoft.Insights/components",
             "location": "[resourceGroup().location]",
             "apiVersion": "2015-05-01",
+            "kind": "other",
             "tags": {
                 "[concat('hidden-link:', resourceGroup().id, '/providers/Microsoft.Web/sites/', parameters('functionAppName'))]": "Resource"
             },
@@ -105,7 +108,7 @@
                     "http20Enabled": true,
                     "httpLoggingEnabled": true,
                     "detailedErrorLoggingEnabled": true,
-                    "linuxFxVersion": "[concat('DOCKER|', parameters('dockerImage'))]",
+                    "linuxFxVersion": "DOCKER",
                     "appCommandLine": "",
                     "appSettings": [
                         {
@@ -113,7 +116,19 @@
                             "value": "[reference(resourceId('Microsoft.Insights/components', variables('applicationInsightsName')), '2015-05-01').InstrumentationKey]"
                         },
                         {
+                            "name": "AZURE_TENANT",
+                            "value": "[variables('tenantId')]"
+                        },
+                        {
+                            "name": "AZURE_SUBSCRIPTION_ID",
+                            "value": "[variables('subscriptionId')]"
+                        },
+                        {
                             "name": "AzureWebJobsStorage",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'),';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2018-02-01').keys[0].value, ';EndpointSuffix=core.windows.net')]"
+                        },
+                        {
+                            "name": "AzureWebJobsDashboard",
                             "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'),';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2018-02-01').keys[0].value, ';EndpointSuffix=core.windows.net')]"
                         },
                         {
@@ -140,7 +155,14 @@
                             "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
                             "value": "false"
                         }
-                    ]
+                    ],
+                    "cors": {
+                        "allowedOrigins": [
+                            "https://functions.azure.com",
+                            "https://functions-staging.azure.com",
+                            "https://functions-next.azure.com"
+                        ]
+                    }
                 },
                 "name": "[parameters('functionAppName')]",
                 "clientAffinityEnabled": false,
